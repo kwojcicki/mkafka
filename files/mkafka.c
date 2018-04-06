@@ -48,7 +48,7 @@ int print_all_messages()
 /* initialized mkafka  */
 int init_mkafka (){
     mkafka = malloc (sizeof(mkafka_t));
-    mkafka->head = NULL;;
+    mkafka->head = NULL;
     mkafka->num_topics = 0; 
 
     mutex = 0;
