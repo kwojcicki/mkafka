@@ -81,6 +81,17 @@ topic_t* add_topic(char* t_id){
             tp->tail = NULL;
             mkafka->head = tp; 
             mkafka->num_topics = 1;
+
+            tp->id = malloc(sizeof(char)*ID_LEN);
+            strncpy(tp->id,t_id,strlen(t_id));
+            tp->max_messages = MAX_MESSAGE_COUNT;
+            //set up the listeners
+            tp->groups = malloc(sizeof(group_t));
+            tp->groups->message = tp->head;
+            tp->groups->next = NULL;
+            tp->groups->id = malloc(sizeof(char)*ID_LEN);
+            strncpy(tp->groups->id,"tmp",strlen("temp"));
+            return tp;
         }
         else {
             //find the next avalible slot,
@@ -93,19 +104,19 @@ topic_t* add_topic(char* t_id){
             new_topic->head = NULL; 
             new_topic->tail = NULL; 
             new_topic->num_messages = 0;
-            tp = new_topic;
             mkafka->num_topics += 1;
+
+            new_topic->id = malloc(sizeof(char)*ID_LEN);
+            strncpy(new_topic->id,t_id,strlen(t_id));
+            new_topic->max_messages = MAX_MESSAGE_COUNT;
+            //set up the listeners
+            new_topic->groups = malloc(sizeof(group_t));
+            new_topic->groups->message = new_topic->head;
+            new_topic->groups->next = NULL;
+            new_topic->groups->id = malloc(sizeof(char)*ID_LEN);
+            strncpy(new_topic->groups->id,"tmp",strlen("temp"));
+            return new_topic;
         }
-        tp->id = malloc(sizeof(char)*ID_LEN);
-        strncpy(tp->id,t_id,strlen(t_id));
-        tp->max_messages = MAX_MESSAGE_COUNT;
-        //set up the listeners
-        tp->groups = malloc(sizeof(group_t));
-        tp->groups->message = tp->head;
-        tp->groups->next = NULL;
-        tp->groups->id = malloc(sizeof(char)*ID_LEN);
-        strncpy(tp->groups->id,"dft",strlen("dft"));
-        return tp;
     }
     else {
         return NULL;
@@ -125,7 +136,7 @@ int push_to_topic()
 
     char* message;
     int messageLen;
-    char topic_id [ID_LEN];
+    char topic_id[ID_LEN];
     messageLen = (int) m_in.m1_i1;
     // If message size > MAX_MESSAGE_LEN return error
     if (messageLen > MAX_MESSAGE_LEN)
@@ -233,15 +244,18 @@ int pull_from_topic()
 {
     while (mutex==1);
     if (!mkafka){
-        return ERROR;
+        return -100;
     }
     mutex = 1; 
 
 
-    char * topic_id = m_in.m1_p3;
+    char topic_id[ID_LEN];
     int bufferSize = m_in.m1_i1;
-    char *group  = m_in.m1_p2; 
+    char group[ID_LEN]; 
     //int group_num = m_in.m1_i3;
+
+    sys_datacopy(who_e, (vir_bytes)m_in.m1_p2, SELF, (vir_bytes)group, ID_LEN);
+    sys_datacopy(who_e, (vir_bytes)m_in.m1_p3, SELF, (vir_bytes)topic_id, ID_LEN);
     
     if (bufferSize < MAX_MESSAGE_LEN)
     {
@@ -251,11 +265,13 @@ int pull_from_topic()
     topic_t *tp = mkafka->head;
 
     do{
-        if (tp->id == topic_id) break; 
+        printf("Topic %s\n",tp->id);
+        if (strcmp(tp->id, topic_id) == 0) break; 
         else if (tp->next == NULL) {
             mutex = 0;
-            return ERROR;
+            return -20;
         }
+        tp = tp->next;
     } while (tp != NULL);
     // Return error if there are no messages in the mailbox
     if (!tp || tp->num_messages == 0)
@@ -269,12 +285,17 @@ int pull_from_topic()
         group_t *grp = tp->groups;
         while (grp != NULL){ 
             if (strcmp(grp->id,group) == 0) break;
+            if (grp->next == NULL) {
+                group_t *new_group = malloc(sizeof(group_t));
+                grp->next = new_group;
+                new_group->next = NULL;
+                new_group->id = malloc(sizeof(char)*ID_LEN);
+                strncpy(tp->groups->id,group,strlen(group));
+                new_group->message = tp->tail;
+                break;
+            }
             grp = grp->next; 
         } 
-        if (grp == NULL) {
-            mutex = 0; 
-            return NO_GROUP;
-        }
 
         if (grp->message != NULL) { 
             message_t *m_ptr = grp->message;
@@ -304,5 +325,5 @@ int pull_from_topic()
 
     }
     mutex = 0;
-    return 1;
+    return OK;
 }

@@ -21,7 +21,7 @@
 #define MAX_MESSAGE_LEN 1024
 #define MAX_TOPICS 16
 #define MAX_GROUPS 4
-#define ID_LEN 5
+#define ID_LEN 10
 
 void mkafka_error(int error){
     switch (error){
