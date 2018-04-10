@@ -265,7 +265,6 @@ int pull_from_topic()
     topic_t *tp = mkafka->head;
 
     do{
-        printf("Topic %s\n",tp->id);
         if (strcmp(tp->id, topic_id) == 0) break; 
         else if (tp->next == NULL) {
             mutex = 0;
