@@ -60,7 +60,5 @@ int (* const call_vec[NR_PM_CALLS])(void) = {
 	CALL(PM_GETPROCNR)	= do_getprocnr,		/* getprocnr(2) */
 	CALL(PM_GETSYSINFO)	= do_getsysinfo,		/* getsysinfo(2) */
     CALL(PM_MK_PUSH) = push_to_topic,
-    CALL(PM_MK_PULL) = pull_from_topic,
-    CALL(PM_MK_CREATE) = create_topic,
-    CALL(PM_MK_REMOVE) = remove_topic
+    CALL(PM_MK_PULL) = pull_from_topic
 };
