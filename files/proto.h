@@ -98,3 +98,5 @@ void set_rusage_times(struct rusage *r_usage, clock_t user_time,
 /* mkafka.c */
 int pull_from_topic ();
 int push_to_topic ();
+int create_topic ();
+int remove_topic ();

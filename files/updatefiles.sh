@@ -7,8 +7,8 @@ for fl in $pmFiles; do
 done
 
 # Copy Makefiles
-cp header_Makefile /usr/src/minix/include/Makefile
-cp pm_Makefile /usr/src/minix/servers/pm/Makefile
+cp header_makefile /usr/src/minix/include/Makefile
+cp pm_makefile /usr/src/minix/servers/pm/Makefile
 
 cp callnr.h /usr/src/minix/include/minix
 cp mkafkalib.h /usr/src/minix/include

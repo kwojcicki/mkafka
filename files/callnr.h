@@ -60,8 +60,10 @@
 #define PM_GETSYSINFO		(PM_BASE + 47)
 #define PM_MK_PUSH              (PM_BASE + 48)
 #define PM_MK_PULL              (PM_BASE + 49)
+#define PM_MK_CREATE              (PM_BASE + 50)
+#define PM_MK_REMOVE              (PM_BASE + 51)
 
-#define NR_PM_CALLS		50	/* highest number from base plus one */
+#define NR_PM_CALLS		52	/* highest number from base plus one */
 
 /*===========================================================================*
  *				Calls to VFS				     *

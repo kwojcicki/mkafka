@@ -4,7 +4,7 @@
 #include "mkafkalib.h"
 #include <minix/syslib.h>
 #include "glo.h"
-
+#include <string.h>
 
 static mkafka_t *mkafka;
 static int mutex;
@@ -55,9 +55,13 @@ int init_mkafka (){
     return OK;
 }
 
+/* tbd */
+int create_topic(){
+    return 1;
+}
 
 /* tbd */
-int remove_topic(char *id){
+int remove_topic(){
     return 1;
 }
 
@@ -65,19 +69,29 @@ int remove_topic(char *id){
  * Must be space
  * id must be unique
  */
-topic_t* add_topic(int id){
+topic_t* add_topic(char* t_id){
     if (mkafka->num_topics < MAX_TOPICS){
         topic_t *tp = mkafka->head;
         if ( tp == NULL ){
             //no topics yet
             tp = malloc(sizeof(topic_t));
-            tp->id = id; 
             tp->num_messages = 0; 
             tp->next = NULL;
             tp->head = NULL;
             tp->tail = NULL;
             mkafka->head = tp; 
             mkafka->num_topics = 1;
+
+            tp->id = malloc(sizeof(char)*ID_LEN);
+            strncpy(tp->id,t_id,strlen(t_id));
+            tp->max_messages = MAX_MESSAGE_COUNT;
+            //set up the listeners
+            tp->groups = malloc(sizeof(group_t));
+            tp->groups->message = tp->head;
+            tp->groups->next = NULL;
+            tp->groups->id = malloc(sizeof(char)*ID_LEN);
+            strncpy(tp->groups->id,"tmp",strlen("temp"));
+            return tp;
         }
         else {
             //find the next avalible slot,
@@ -87,21 +101,24 @@ topic_t* add_topic(int id){
             topic_t *new_topic = malloc(sizeof(topic_t));
             tp->next = new_topic;
             new_topic->next = NULL;
-            new_topic->id = id;
             new_topic->head = NULL; 
             new_topic->tail = NULL; 
             new_topic->num_messages = 0;
-            tp = new_topic;
             mkafka->num_topics += 1;
+
+            new_topic->id = malloc(sizeof(char)*ID_LEN);
+            strncpy(new_topic->id,t_id,strlen(t_id));
+            new_topic->max_messages = MAX_MESSAGE_COUNT;
+            //set up the listeners
+            new_topic->groups = malloc(sizeof(group_t));
+            new_topic->groups->message = new_topic->head;
+            new_topic->groups->next = NULL;
+            new_topic->groups->id = malloc(sizeof(char)*ID_LEN);
+            strncpy(new_topic->groups->id,"tmp",strlen("temp"));
+            return new_topic;
         }
-        //set up the listeners
-        for (int i = 0; i < MAX_GROUPS; i++){
-            tp->groups[i] = tp->head;
-        }
-        return tp;
     }
     else {
-        printf ("Too Many topics\n");
         return NULL;
     }
 }
@@ -119,14 +136,11 @@ int push_to_topic()
 
     char* message;
     int messageLen;
-    int topic_id;
+    char topic_id[ID_LEN];
+    messageLen = (int) m_in.m1_i1;
     // If message size > MAX_MESSAGE_LEN return error
-    messageLen = m_in.m1_i1;
-    topic_id = m_in.m1_i2;
-    printf("message: %s, topic: %d, len: %d\n",message,topic_id,messageLen);
     if (messageLen > MAX_MESSAGE_LEN)
     {
-        printf("Error: received message size exceeds %d chars\n", MAX_MESSAGE_LEN);
         mutex = 0;
         return MESSAGE_TOO_LONG;
     }
@@ -134,6 +148,7 @@ int push_to_topic()
     int messageBytes = messageLen * sizeof(char);
     message = malloc(messageBytes);
     sys_datacopy(who_e, (vir_bytes)m_in.m1_p1, SELF, (vir_bytes)message, messageBytes);
+    sys_datacopy(who_e, (vir_bytes)m_in.m1_p2, SELF, (vir_bytes)topic_id, ID_LEN);
 
     //printf("Mailbox: New message sent. Message content with %d bytes: %s\n", messageBytes, message);
 
@@ -141,18 +156,17 @@ int push_to_topic()
     if (!mkafka){
         init_mkafka();
         add_topic (topic_id);
-        printf("created mkafka\n");
     }
 
         
     topic_t *tp = mkafka->head;
     while (tp != NULL){
-        if (tp->id == topic_id){
+        if (strcmp(tp->id, topic_id) == 0){
             break;
         }
         if (tp->next == NULL){
             if (mkafka->num_topics >= MAX_TOPICS) {
-                printf ("Max topics reached, can't add new topic/n");
+                mutex = 0;
                 return MAX_TOPICS;
             }
         }
@@ -162,10 +176,10 @@ int push_to_topic()
         tp = add_topic(topic_id);
         if (tp == NULL){
             //max topics reached
+            mutex = 0;
             return MAX_TOPICS;
          }
     }
-    printf("Found topic\n");
     
     message_t *new_message = malloc(sizeof(message_t));
     new_message->message = message;
@@ -189,10 +203,12 @@ int push_to_topic()
         tp->tail->prev = tp->head;
     }
     //max messages in queue (have to move all indexs back by one)
-    else if (tp->num_messages == MAX_MESSAGE_COUNT){
+    else if (tp->num_messages == tp->max_messages){
         //push forwawrds by 1
-        for (int i = 0; i < MAX_GROUPS; i++){
-            if (tp->groups[i] == tp->tail ) tp->groups[i] = tp->tail->prev;
+        group_t *group_iter = tp->groups;
+        while (group_iter != NULL){
+            if (group_iter->message == tp->tail) group_iter->message = tp->tail->prev;
+            group_iter = group_iter->next;
         }
         message_t *new_tail = tp->tail->prev;
         tp->tail->prev->next = NULL;
@@ -210,13 +226,13 @@ int push_to_topic()
     }
     tp->head = new_message;
     tp->num_messages += 1;
-
-    printf("Message Added\n");
-    for (int i = 0; i < MAX_GROUPS; i++){
-        //if a group is NULL then it has seen all of the older messages -> point to newest
-        if (tp->groups[i] == NULL ) tp->groups[i] = tp->head;
+    
+    //new messages, move up the groups that are empty
+    group_t *group_iter = tp->groups;
+    while (group_iter != NULL) {
+        if (group_iter->message == NULL) group_iter->message = tp->head;
+        group_iter = group_iter->next;
     }
-    printf ("Message sent\n");
 
     mutex = 0;
     return OK;
@@ -228,29 +244,33 @@ int pull_from_topic()
 {
     while (mutex==1);
     if (!mkafka){
-        return ERROR;
+        return -100;
     }
     mutex = 1; 
 
 
-    int topic_id = m_in.m1_i1;
-    int bufferSize = m_in.m1_i2;
-    int group_num = m_in.m1_i3;
+    char topic_id[ID_LEN];
+    int bufferSize = m_in.m1_i1;
+    char group[ID_LEN]; 
+    //int group_num = m_in.m1_i3;
+
+    sys_datacopy(who_e, (vir_bytes)m_in.m1_p2, SELF, (vir_bytes)group, ID_LEN);
+    sys_datacopy(who_e, (vir_bytes)m_in.m1_p3, SELF, (vir_bytes)topic_id, ID_LEN);
     
     if (bufferSize < MAX_MESSAGE_LEN)
     {
-        printf("Error: insufficient buffer size, should be %d chars\n", MAX_MESSAGE_LEN);
         mutex = 0;
         return MESSAGE_TOO_LONG;
     }
     topic_t *tp = mkafka->head;
 
     do{
-        if (tp->id == topic_id) break; 
+        if (strcmp(tp->id, topic_id) == 0) break; 
         else if (tp->next == NULL) {
-            printf ("Couldn't find topic\n");
-            return ERROR;
+            mutex = 0;
+            return -20;
         }
+        tp = tp->next;
     } while (tp != NULL);
     // Return error if there are no messages in the mailbox
     if (!tp || tp->num_messages == 0)
@@ -261,22 +281,37 @@ int pull_from_topic()
     }
     else
     {
-        if (tp->groups[group_num] != NULL) { 
-            message_t *m_ptr = tp->groups[group_num];
+        group_t *grp = tp->groups;
+        while (grp != NULL){ 
+            if (strcmp(grp->id,group) == 0) break;
+            if (grp->next == NULL) {
+                group_t *new_group = malloc(sizeof(group_t));
+                grp->next = new_group;
+                new_group->next = NULL;
+                new_group->id = malloc(sizeof(char)*ID_LEN);
+                strncpy(tp->groups->id,group,strlen(group));
+                new_group->message = tp->tail;
+                break;
+            }
+            grp = grp->next; 
+        } 
+
+        if (grp->message != NULL) { 
+            message_t *m_ptr = grp->message;
             char* temp = "\0";
             int messageBytes = strlen(m_ptr->message) * sizeof(char);
             sys_datacopy(SELF, (vir_bytes)m_ptr->message, who_e, (vir_bytes)m_in.m1_p1, messageBytes);
             sys_datacopy(SELF, (vir_bytes)temp, who_e, (vir_bytes)(m_in.m1_p1 + messageBytes), 1);
-            tp->groups[group_num] = tp->groups[group_num]->prev;
-
+            grp->message = grp->message->prev;
         }
         else {
             mutex = 0; 
             return NO_MESSAGE; 
         }
-        for (int i = 0; i < MAX_GROUPS; i++) {
-            if (tp->groups[i] == tp->tail) break;
-            if (i == MAX_GROUPS -1){
+        group_t *grp_itr = tp->groups;
+        while (grp_itr != NULL) {
+            if (grp_itr->message == tp->tail) break;
+            if (grp_itr->next == NULL){
                 //remove head
                 message_t *new_tail = tp->tail->prev; 
                 free(tp->tail->message); 
@@ -284,10 +319,10 @@ int pull_from_topic()
                 tp->tail = new_tail; 
                 new_tail->next = NULL;
             }
+            grp_itr = grp_itr->next; 
         }
 
     }
-    // In case of not find a message for the recipient return error
     mutex = 0;
-    return ERROR;
+    return OK;
 }
