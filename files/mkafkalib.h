@@ -22,13 +22,6 @@
 #define MAX_GROUPS 4
 
 void mkafka_error(int error){
-    switch (error)
-        case ERROR:
-            printf("Unspecified error occured\n");
-        case NO_TOPIC:
-        case MAX_TOPIC:
-        case MESSAGE_TOO_LONG:
-        case NO_MESSAGE:
 }
 
 
