@@ -16,17 +16,18 @@ int main(int argc, char* argv[])
 
     if ( argc != 3) return -1;
 
-    char* umessage = argv[1];
-    int topic = atoi(argv[2]);
 
+    int topic = atoi(argv[1]);
+    int group = atoi(argv[2]);
+    
     char* message = malloc(20*sizeof(char));
 
     int i = 0;
     // Parent will send the message every second
     while (1) {
         // Child will receive the message every 5 seconds
-        char destBuffer[MAX_MESSAGE_LEN];
-        receive_message(destBuffer, sizeof(destBuffer), 1, topic);
+        char destBuffer[MAX_MESSAGE_LEN] = "";
+        receive_message(destBuffer, sizeof(destBuffer), group, topic);
         printf ("rcv: %s\n", destBuffer);
         sleep(2); 
     }
