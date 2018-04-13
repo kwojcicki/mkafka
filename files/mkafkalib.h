@@ -19,7 +19,7 @@
 #define NO_MESSAGE -5
 #define MAX_MESSAGE_LEN 1024
 #define MAX_TOPICS 16
-#define MAX_GROUPS 4
+#define MAX_GROUPS 16
 
 void mkafka_error(int error){
 }
