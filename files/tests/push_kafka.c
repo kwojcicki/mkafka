@@ -26,7 +26,6 @@ int main(int argc, char* argv[])
     while (1) {
       i++;
       snprintf(message,20,"%d: %s",i, umessage);
-      printf("mesage: %s len: %d\n",message, strlen(message));
       send_message(message, strlen(message) + 1, topic);
       sleep(1);
     }
